@@ -1,7 +1,8 @@
 #!/usr/bin/env python
 
+
+
 # import normal packages
-from vedbus import VeDbusService
 import platform
 import logging
 import sys
@@ -18,9 +19,9 @@ import configparser  # for config/ini file
 import struct
 
 # our own packages from victron
-sys.path.insert(1, os.path.join(os.path.dirname(__file__),
-                '/opt/victronenergy/dbus-systemcalc-py/ext/velib_python'))
 
+sys.path.insert(1, os.path.join(os.path.dirname(__file__), '/opt/victronenergy/dbus-systemcalc-py/ext/velib_python'))
+from vedbus import VeDbusService
 
 class DbusIobrokerSmartmeterService:
     def __init__(self, servicename, deviceinstance, paths, productname='Smartmeter Reader', connection='Smartmeter via IOBroker HTTP JSON service'):
@@ -121,18 +122,6 @@ class DbusIobrokerSmartmeterService:
         value = self._config['DEFAULT']['IOBrokerPathOverallConsumption']
         return value
 
-    def _getSmartMeterPhase1Consumption(self):
-        value = self._config['DEFAULT']['IOBrokerPathPhase1']
-        return value
-
-    def _getSmartMeterPhase2Consumption(self):
-        value = self._config['DEFAULT']['IOBrokerPathPhase2']
-        return value
-
-    def _getSmartMeterPhase3Consumption(self):
-        value = self._config['DEFAULT']['IOBrokerPathPhase3']
-        return value
-
     def _getSmartMeterGridSold(self):
         value = self._config['DEFAULT']['IOBrokerPathGridSold']
         return value
@@ -141,19 +130,14 @@ class DbusIobrokerSmartmeterService:
         value = self._config['DEFAULT']['IOBrokerPathGridBought']
         return value
 
-    def _getSmartMeterVoltage(self):
-        value = self._config['DEFAULT']['IOBrokerPathVoltage']
-        return value
-
     def _getIOBrokerPath(self):
         value = self._config['DEFAULT']['IOBrokerHostPath']
         return value
 
     def _getIOBrokerSmartmeterData(self):
         URL = self._getIOBrokerPath() + "/getBulk/" + self._getSmartMeterDeviceId() + "," + self._getSmartMeterOverallConsumption() + "," + \
-            self._getSmartMeterPhase1Consumption() + "," + self._getSmartMeterPhase2Consumption() + \
-            "," + self._getSmartMeterPhase3Consumption() + "," + self._getSmartMeterGridBought() + \
-            "," + self._getSmartMeterGridSold() + "," + self._getSmartMeterVoltage()
+            "," + self._getSmartMeterGridBought() + \
+            "," + self._getSmartMeterGridSold()
 
         headers = {}
 
@@ -191,33 +175,17 @@ class DbusIobrokerSmartmeterService:
             # send data to DBus
             total_value = next(
                 (x for x in meter_data if x['id'] == self._getSmartMeterOverallConsumption()), None)['val']
-            phase_1 = next((x for x in meter_data if x['id'] ==
-                            self._getSmartMeterPhase1Consumption()), None)['val']
-            phase_2 = next((x for x in meter_data if x['id'] ==
-                            self._getSmartMeterPhase2Consumption()), None)['val']
-            phase_3 = next((x for x in meter_data if x['id'] ==
-                            self._getSmartMeterPhase3Consumption()), None)['val']
             grid_sold = next((x for x in meter_data if x['id'] ==
                               self._getSmartMeterGridSold()), None)['val'] - self.grid_sold_start
             grid_bought = next((x for x in meter_data if x['id'] ==
                                 self._getSmartMeterGridBought()), None)['val'] - self.grid_bought_start
-            voltage = next((x for x in meter_data if x['id'] ==
-                            self._getSmartMeterVoltage()), None)['val']
 
             # positive: consumption, negative: feed into grid
             self._dbusservice['/Ac/Power'] = total_value
-            self._dbusservice['/Ac/L1/Voltage'] = voltage
-            self._dbusservice['/Ac/L2/Voltage'] = voltage
-            self._dbusservice['/Ac/L3/Voltage'] = voltage
-            self._dbusservice['/Ac/L1/Current'] = phase_1 / voltage
-            self._dbusservice['/Ac/L2/Current'] = phase_2 / voltage
-            self._dbusservice['/Ac/L3/Current'] = phase_3 / voltage
-            self._dbusservice['/Ac/L1/Power'] = phase_1
-            self._dbusservice['/Ac/L2/Power'] = phase_2
-            self._dbusservice['/Ac/L3/Power'] = phase_3
+            self._dbusservice['/Ac/L1/Power'] = total_value / 3
+            self._dbusservice['/Ac/L2/Power'] = total_value / 3
+            self._dbusservice['/Ac/L3/Power'] = total_value / 3
 
-            self._dbusservice['/Ac/Current'] = total_value / voltage
-            self._dbusservice['/Ac/Voltage'] = phase_3
 
             ##self._dbusservice['/Ac/L1/Energy/Forward'] = (meter_data['emeters'][0]['total']/1000)
             self._dbusservice['/Ac/Energy/Forward'] = grid_bought
@@ -285,23 +253,16 @@ def main():
                 '/Ac/Power': {'initial': 0, 'textformat': _w},
 
                 '/Ac/Current': {'initial': 0, 'textformat': _a},
-                '/Ac/Voltage': {'initial': 0, 'textformat': _v},
 
-                '/Ac/L1/Voltage': {'initial': 0, 'textformat': _v},
-                '/Ac/L2/Voltage': {'initial': 0, 'textformat': _v},
-                '/Ac/L3/Voltage': {'initial': 0, 'textformat': _v},
-                '/Ac/L1/Current': {'initial': 0, 'textformat': _a},
-                '/Ac/L2/Current': {'initial': 0, 'textformat': _a},
-                '/Ac/L3/Current': {'initial': 0, 'textformat': _a},
                 '/Ac/L1/Power': {'initial': 0, 'textformat': _w},
                 '/Ac/L2/Power': {'initial': 0, 'textformat': _w},
                 '/Ac/L3/Power': {'initial': 0, 'textformat': _w},
-                '/Ac/L1/Energy/Forward': {'initial': 0, 'textformat': _kwh},
-                '/Ac/L2/Energy/Forward': {'initial': 0, 'textformat': _kwh},
-                '/Ac/L3/Energy/Forward': {'initial': 0, 'textformat': _kwh},
-                '/Ac/L1/Energy/Reverse': {'initial': 0, 'textformat': _kwh},
-                '/Ac/L2/Energy/Reverse': {'initial': 0, 'textformat': _kwh},
-                '/Ac/L3/Energy/Reverse': {'initial': 0, 'textformat': _kwh},
+#                '/Ac/L1/Energy/Forward': {'initial': 0, 'textformat': _kwh},
+#                '/Ac/L2/Energy/Forward': {'initial': 0, 'textformat': _kwh},
+#                '/Ac/L3/Energy/Forward': {'initial': 0, 'textformat': _kwh},
+#                '/Ac/L1/Energy/Reverse': {'initial': 0, 'textformat': _kwh},
+#                '/Ac/L2/Energy/Reverse': {'initial': 0, 'textformat': _kwh},
+#                '/Ac/L3/Energy/Reverse': {'initial': 0, 'textformat': _kwh},
             })
 
         logging.info(
